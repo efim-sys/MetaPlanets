@@ -1,0 +1,449 @@
+<head>
+  <style>
+    ::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body style="background-color: #1f3d44; padding: 0; margin: 0">
+  <div
+    id="infoDiv"
+    style="
+      color: bisque;
+      font-family: Arial, Helvetica, sans-serif;
+      position: fixed;
+      font-size: 30px;
+      margin: 10px;
+      background-color: rgba(100, 100, 100, 0.5);
+      border-radius: 50vmin;
+      padding: 10px;
+      top: 0;
+      left: 0;
+      user-select: none;
+    "
+  >
+    ieoieroieoernegroe
+  </div>
+  <canvas
+    style="width: 100%; height: 100%; padding: 0; margin: 0"
+    id="ctx"
+  ></canvas>
+  <script>
+    k = 10;
+    G = 1000;
+
+    speedMulti = 0.2;
+
+    let focusObject = { x: 0, y: 0 };
+
+    const tailLength = 50;
+
+    let paused = false;
+    let creating = false;
+
+    let randomSeed = 0.5;
+
+    let prevRandom = 0;
+
+    let scroll = { x: 0, y: 0 };
+
+    let mouse = { x: 0, y: 0 };
+
+    function isThereStar(x, y) {
+      return Math.abs(x * y) % 365 > 300 && Math.sin(x * y) > 0.5;
+    }
+
+    function getRandomColor() {
+      let h = randomHue();
+      console.log({
+        color: HL(h, 1),
+        subcolor: HL(h, 0.5),
+      });
+      return {
+        color: HL(h, 1),
+        subcolor: HL(h, 0.5),
+        hue: h,
+      };
+    }
+
+    function randomHue() {
+      let h = Math.floor((prevRandom + Math.random() * randomSeed * 255) % 255);
+      prevRandom = h;
+      return h;
+    }
+
+    function HL(h, l) {
+      return `hsl(${h.toString()}, 100%, ${(100 - 50 * l).toString()}%)`;
+    }
+
+    cnv = document.getElementById("ctx");
+    cnv.width = window.innerWidth;
+    cnv.height = window.innerHeight;
+    ctx = cnv.getContext("2d");
+
+    class Planet {
+      // prevPositions = [];
+      updatePosition() {
+        // for (
+        //   let iii = 0;
+        //   iii < tailLength && iii < this.prevPositions.length;
+        //   iii++
+        // ) {
+        //   ctx.beginPath();
+        //   ctx.arc(
+        //     this.prevPositions[iii].x - scroll.x - focusObject.x,
+        //     this.prevPositions[iii].y - scroll.y - focusObject.y,
+        //     this.getDiameter() / 2,
+        //     0,
+        //     2 * Math.PI,
+        //     false
+        //   );
+        //   ctx.fillStyle = HL(this.colors.hue, iii / tailLength);
+        //   ctx.fill();
+        // }
+        ctx.beginPath();
+        ctx.arc(
+          this.x - scroll.x - focusObject.x,
+          this.y - scroll.y - focusObject.y,
+          this.getDiameter() / 2,
+          0,
+          2 * Math.PI,
+          false
+        );
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        // this.prevPositions.push({ x: this.x, y: this.y });
+        // if (this.prevPositions.length > tailLength) this.prevPositions.shift();
+      }
+      getDiameter() {
+        return k * Math.sqrt(this.mass);
+      }
+      constructor(obj) {
+        this.mass = obj.mass;
+        this.x = obj.x;
+        this.y = obj.y;
+        this.vx = obj.vx;
+        this.vy = obj.vy;
+        this.color = obj.colors.color;
+        this.subcolor = obj.colors.subcolor;
+        this.colors = obj.colors;
+        this.central = obj.central;
+        // this.prevPositions = [];
+        this.updatePosition();
+      }
+    }
+
+    planets = [];
+
+    function hypot(a, b) {
+      return Math.sqrt(a ** 2 + b ** 2);
+    }
+
+    let paramForNew = {
+      fixed: false,
+      mass: 5,
+    };
+
+    function drawStars() {
+      let w = cnv.clientWidth;
+      let h = cnv.clientHeight;
+
+      let step = 50;
+      // console.log(scroll.x);
+      let sx = Math.round((scroll.x + focusObject.x) / step) * step;
+      let sy = Math.round((scroll.y + focusObject.y) / step) * step;
+      // console.log(sx, sy);
+      for (let x = sx; x < w + sx; x += step) {
+        for (let y = sy; y < h + sy; y += step) {
+          if (!isThereStar(x, y)) continue;
+          ctx.fillStyle = "white";
+          ctx.fillRect(
+            x - scroll.x - focusObject.x,
+            y - scroll.y - focusObject.y,
+            3,
+            3
+          );
+        }
+      }
+    }
+
+    setInterval(() => {
+      if (creating) return;
+      ctx.clearRect(0, 0, cnv.width, cnv.height);
+      drawStars();
+      if (paused) {
+        planets.forEach((e) => {
+          e.updatePosition();
+        });
+        return;
+      }
+
+      // cnv.width = cnv.clientWidth;
+      // cnv.height = cnv.clientHeight;
+
+      for (let planet1 of planets) {
+        for (let planet2 of planets) {
+          if (planet1 == planet2) continue;
+          let dx = Math.abs(planet1.x - planet2.x);
+          let dy = Math.abs(planet1.y - planet2.y);
+          if (
+            hypot(dx, dy) <=
+            planet1.getDiameter() / 2 + planet2.getDiameter() / 2
+          ) {
+            let CoM = {
+              x:
+                (planet1.x * planet1.mass + planet2.x * planet2.mass) /
+                (planet1.mass + planet2.mass),
+              y:
+                (planet1.y * planet1.mass + planet2.y * planet2.mass) /
+                (planet1.mass + planet2.mass),
+            };
+            let CoV = {
+              x:
+                (planet1.vx * planet1.mass + planet2.vx * planet2.mass) /
+                (planet1.mass + planet2.mass),
+              y:
+                (planet1.vy * planet1.mass + planet2.vy * planet2.mass) /
+                (planet1.mass + planet2.mass),
+            };
+            // console.log(
+            //   `COM ${JSON.stringify(CoM)}, CoV ${JSON.stringify(CoV)}`
+            // );
+            let central = planet1.central || planet2.central;
+            let mass = planet1.mass + planet2.mass;
+            let fcousedOnAny = planet1 == focusObject || planet2 == focusObject;
+            planets.splice(planets.indexOf(planet1), 1);
+            planets.splice(planets.indexOf(planet2), 1);
+            let joinedTo = createPlanet(
+              CoM.x,
+              CoM.y,
+              mass,
+              getRandomColor(),
+              CoV.x,
+              CoV.y,
+              true,
+              central
+            );
+            if (fcousedOnAny) focusObject = joinedTo;
+          }
+        }
+      }
+
+      planets.forEach((e, i) => {
+        e.updatePosition();
+        if (e.central) return;
+        planets.forEach((m, p) => {
+          if (i == p) return;
+          let angle = Math.atan2(e.x - m.x, e.y - m.y);
+          e.vx -=
+            speedMulti *
+            ((G * m.mass * Math.sin(angle)) /
+              ((e.x - m.x) / Math.sin(angle)) ** 2);
+          e.vy -=
+            speedMulti *
+            ((G * m.mass * Math.cos(angle)) /
+              ((e.x - m.x) / Math.sin(angle)) ** 2);
+        });
+        e.updatePosition();
+      });
+      planets.forEach((e) => {
+        if (e.central) return;
+        e.x += e.vx;
+        e.y += e.vy;
+      });
+    }, 16.666);
+
+    function toProtoPlanet(e) {
+      return {
+        x: e.x,
+        y: e.y,
+        vx: e.vx,
+        vy: e.vy,
+        mass: e.mass,
+        central: e.central,
+      };
+    }
+
+    function createPlanet(
+      x,
+      y,
+      mass,
+      colors,
+      vx = 0,
+      vy = 0,
+      autopush = true,
+      central = false
+    ) {
+      console.log("Planet created");
+      prototype = new Planet({
+        x: x,
+        y: y,
+        mass: mass,
+        colors: colors,
+        vx: vx,
+        vy: vy,
+        central: central,
+      });
+      if (autopush) planets.push(prototype);
+      return prototype;
+    }
+
+    document.body.addEventListener("mousemove", (e) => {
+      mouse.x = e.clientX + scroll.x + focusObject.x;
+      mouse.y = e.clientY + scroll.y + focusObject.y;
+    });
+
+    document.body.onmousedown = (e) => {
+      creating = true;
+      let prototype = createPlanet(
+        e.clientX + scroll.x + focusObject.x,
+        e.clientY + scroll.y + focusObject.y,
+        paramForNew.mass,
+        getRandomColor(),
+        0,
+        0,
+        false,
+        paramForNew.fixed
+      );
+
+      prototype.updatePosition();
+
+      document.body.onmousemove = (ev) => {
+        prototype.vx =
+          (prototype.x - ev.clientX - scroll.x - focusObject.x) / -10;
+        prototype.vy =
+          (prototype.y - ev.clientY - scroll.y - focusObject.y) / -10;
+        let e = {
+          x: prototype.x,
+          y: prototype.y,
+          vx: prototype.vx,
+          vy: prototype.vy,
+          subcolor: prototype.subcolor,
+        };
+        ctx.clearRect(0, 0, cnv.width, cnv.height);
+        drawStars();
+        copyplanets = [...planets].map(toProtoPlanet);
+        for (let i = 0; i < 400; i++) {
+          copyplanets.forEach((e, i) => {
+            if (e.central) return;
+            copyplanets.forEach((m, p) => {
+              if (i == p) return;
+              let angle = Math.atan2(e.x - m.x, e.y - m.y);
+              e.vx -=
+                speedMulti *
+                ((G * m.mass * Math.sin(angle)) /
+                  ((e.x - m.x) / Math.sin(angle)) ** 2);
+              e.vy -=
+                speedMulti *
+                ((G * m.mass * Math.cos(angle)) /
+                  ((e.x - m.x) / Math.sin(angle)) ** 2);
+            });
+          });
+          copyplanets.forEach((e) => {
+            if (e.central) return;
+            e.x += e.vx;
+            e.y += e.vy;
+          });
+
+          copyplanets.forEach((m, p) => {
+            let angle = Math.atan2(e.x - m.x, e.y - m.y);
+            e.vx -=
+              speedMulti *
+              ((G * m.mass * Math.sin(angle)) /
+                ((e.x - m.x) / Math.sin(angle)) ** 2);
+            e.vy -=
+              speedMulti *
+              ((G * m.mass * Math.cos(angle)) /
+                ((e.x - m.x) / Math.sin(angle)) ** 2);
+          });
+
+          ctx.beginPath();
+          ctx.arc(
+            e.x - scroll.x - focusObject.x,
+            e.y - scroll.y - focusObject.y,
+            2,
+            0,
+            2 * Math.PI,
+            false
+          );
+          ctx.fillStyle = e.subcolor;
+          ctx.fill();
+          prototype.updatePosition();
+          e.x += e.vx;
+          e.y += e.vy;
+        }
+        planets.forEach((e) => {
+          e.updatePosition();
+        });
+      };
+
+      document.body.onmouseup = (ev) => {
+        creating = false;
+        prototype.vx =
+          (prototype.x - ev.clientX - scroll.x - focusObject.x) / -10;
+        prototype.vy =
+          (prototype.y - ev.clientY - scroll.y - focusObject.y) / -10;
+        planets.push(prototype);
+        document.body.onmousemove = {};
+        ctx.clearRect(0, 0, cnv.width, cnv.height);
+      };
+    };
+
+    window.addEventListener("wheel", function (ev) {
+      // console.log("SCRL", ev);
+      scroll.x += ev.deltaX;
+      scroll.y += ev.deltaY;
+    });
+
+    document.onkeypress = (ev) => {
+      console.log(ev.keyCode);
+      if (ev.keyCode == 115) {
+        // s
+        console.log("statics");
+        paramForNew.fixed = !paramForNew.fixed;
+      }
+      if (ev.keyCode == 112) {
+        console.log("PAUSED");
+        paused = !paused;
+      }
+      if (ev.keyCode == 61) {
+        // +
+        paramForNew.mass += 5;
+        console.log("size +");
+      }
+      if (ev.keyCode == 102) {
+        let flag = false;
+        planets.forEach((e) => {
+          if (hypot(e.x - mouse.x, e.y - mouse.y) <= e.getDiameter() / 2) {
+            focusObject = e;
+            flag = true;
+          }
+        });
+        if (!flag)
+          focusObject = {
+            x: mouse.x,
+            y: mouse.y,
+          };
+        scroll.x = -cnv.width / 2;
+        scroll.y = -cnv.height / 2;
+      }
+      if (ev.keyCode == 45) {
+        // -
+        paramForNew.mass -= 5;
+        console.log("size decreasing");
+        if (paramForNew.mass == 0) paramForNew.mass = 5;
+      }
+      document.getElementById("infoDiv").innerHTML =
+        "Параметры для нового: " +
+        JSON.stringify(paramForNew) +
+        "; Пауза: " +
+        paused;
+    };
+
+    document.getElementById("infoDiv").innerHTML =
+      "Параметры для нового: " +
+      JSON.stringify(paramForNew) +
+      "; Пауза: " +
+      paused;
+  </script>
+</body>
